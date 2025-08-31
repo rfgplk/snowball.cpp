@@ -1,0 +1,45 @@
+# build.ninja
+timer = /usr/bin/time -p
+compiler_gnuc = gcc
+compiler_gnu = g++
+compiler_llvm = clang++
+
+
+cflags_debug = -g -march=native
+cflags_optimizations = -Ofast -mavx2 -mbmi -march=native
+
+# annoying but works
+cflags_warn_all_llvm = -Weverything
+cflags_warn_base = -Wall -Wextra -Wpedantic
+cflags_warn_options = -Wno-cpp -Wunused -Wshadow -Wconversion -Wcast-qual -Wconversion-null -Woverlength-strings -Wpointer-arith -Wunused-local-typedefs -Wunused-result -Wvarargs -Wvla -Wwrite-strings -Wduplicated-cond -Wdouble-promotion -Wdisabled-optimization -Winline -Wfloat-equal -Wmissing-noreturn -Wpacked -Wnonnull -Wundef -Wtrampolines -Winline -Winit-self -Wcast-align -Wnarrowing -Wregister -Wmain -Wchanges-meaning -Wsequence-point -Wattributes
+cflags_warn_ignore = -Wno-implicit-fallthrough -Wno-sign-conversion -Wno-variadic-macros
+
+cflags_ext = -pedantic-errors -nodefaultlibs -fstack-protector-strong -fstrict-overflow -fopenmp -fext-numeric-literals -ffast-math -flto -fdiagnostics-color=always -fconcepts-diagnostics-depth=2
+cflags_ext_llvm = -fopenmp -ffast-math -flto -fdiagnostics-color=always
+
+
+
+
+cflags_gnu_debug =  -std=c++23 $cflags_debug $cflags_warn_base $cflags_warn_options $cflags_warn_ignore $cflags_ext
+cflags_gnu =  -std=c++23 $cflags_optimizations $cflags_warn_base $cflags_warn_options $cflags_warn_ignore $cflags_ext
+cflags_llvm =  -std=c++23 $cflags_optimizations $cflags_warn_all_llvm $cflags_ext_llvm
+compile_flags_std = -lc -lgcc -lgcc_s -lstdc++ -lm
+
+clibs_location = -L./libs
+clibs_includes = -Isrc
+
+clibs_static = -static-libstdc++
+build_directory = bin
+
+rule cc_compile_cmnd
+  command = echo -e "\n\n\033[1;32mBuilding:\033[0m $out" && $timer $compiler_gnu $cflags_gnu $clibs_location $clibs_includes $in $compile_flags_std -o $build_directory/$out;
+rule cc_compile_cmnd_debug
+  command = echo -e "\n\n\033[1;32mBuilding:\033[0m $out" && $timer $compiler_gnu $cflags_gnu_debug $clibs_location $clibs_includes $in $compile_flags_std -o $build_directory/$out;
+
+# core
+build snowball_require_test: cc_compile_cmnd_debug tests/require.cpp
+build snowball_example_require: cc_compile_cmnd_debug examples/require.cpp
+build snowball_example_check: cc_compile_cmnd examples/check.cpp
+build snowball_example_fac: cc_compile_cmnd examples/fac.cpp
+build snowball_example_fuzz: cc_compile_cmnd_debug examples/fuzz.cpp
+
