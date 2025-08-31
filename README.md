@@ -1,4 +1,4 @@
-<div align="center">
+<div align="left">
   <img src="https://github.com/user-attachments/assets/a86cc00a-3f86-413c-b137-67560c49d668" alt="snowball_logo_384" width="300"/>
   
 # snowball
