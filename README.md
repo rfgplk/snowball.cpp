@@ -14,7 +14,7 @@ The goal of this library is to massively simplify unit testing while offering ef
 To compile the examples from source run `ninja` or `ninja {example name}`, such as `ninja snowball_example_fac`. 
 
 
-snowball is a platform agnostic library, as such the code will work on any operating system.
+snowball is a platform agnostic library, as such the code will work on any operating system (minus the stack tracing, that part is Linux only).
 
 ## General Usage
 ```cpp
