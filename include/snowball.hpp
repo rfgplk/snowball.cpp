@@ -7,13 +7,14 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 #include <random>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 
 #include <exception>
-#include <execinfo.h> // TODO: add Windows spec.
+#include <execinfo.h>     // TODO: add Windows spec.
 #include <stdexcept>
 #include <string>
 
@@ -33,11 +34,18 @@ constexpr static const bool __default_else_throw_on_require = false;
 };
 
 // start out functions
+
+__attribute__((noreturn)) void
+__exit(void)
+{
+  __builtin_exit(6);
+}
+
 void
 __abort(void)
 {
   if constexpr ( config::__default_abort_on_require ) {
-    __builtin_exit(6);
+    __exit();
   } else if constexpr ( config::__default_else_throw_on_require ) {
     throw std::runtime_error{ "snowball exception in abort()" };
   }
@@ -100,6 +108,9 @@ verify_debug(void)
   __print("\033[34msnowball warning:\033[0m the executable *wasn't* compiled in debug mode (-g).\n\r");
 #endif
 }
+
+#define enable_scope(x) if constexpr ( true )
+#define disable_scope(x) if constexpr ( true )
 
 inline __attribute__((always_inline)) void
 should_print_stack(void)
@@ -240,7 +251,61 @@ end_test_case(void)
   __global_test_case.clear();
 }
 
+void
+early_end(void)
+{
+  __abort();
+}
+
+template <typename... T>
+void
+print(const T &...p)
+{
+  std::cout << "\033[34msnowball msg:\033[0m ";
+  ((std::cout << p), ...) << std::endl;
+}
+
+void
+print(const char *p)
+{
+  __print("\033[34msnowball msg:\033[0m ");
+  __print(p);
+  __print("\n\r");
+}
+
+template <typename T>
+void
+error(const T &p)
+{
+  __print_error("\033[34msnowball error():\033[0m ");
+  std::cout << p << std::endl;
+  __require_clbck();
+  __abort();
+}
+
+void
+error(const char *ptr)
+{
+  __print_error("\033[34msnowball error():\033[0m ");
+  __print_error(ptr);
+  __print_error("\r\n");
+  __require_clbck();
+  __abort();
+}
+
 // main unit testing functions
+template <typename... FArgs, typename... Args>
+void
+require_distinct(bool (*fn)(FArgs...), Args &&...args)
+{
+  if ( fn(std::forward<Args>(args)...) == false ) {
+    __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
+    should_print_stack();
+    __require_clbck();
+    __abort();
+  }
+};
+
 template <typename... Args>
 void
 require(bool (*fn)(Args...), Args &&...args)
@@ -253,10 +318,86 @@ require(bool (*fn)(Args...), Args &&...args)
   }
 };
 
+// main unit testing functions
+template <typename... FArgs, typename... Args>
+void
+require_print(bool (*fn)(FArgs...), Args &&...args)
+{
+  bool _t = fn(std::forward<Args>(args)...);
+  print(_t);
+  if ( _t == false ) {
+    __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
+    should_print_stack();
+    __require_clbck();
+    __abort();
+  }
+};
+
+template <typename... Args>
+void
+require_print(bool (&fn)(Args...), Args &&...args)
+{
+  bool _t = fn(std::forward<Args>(args)...);
+  print(_t);
+  if ( _t == false ) {
+    __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
+    should_print_stack();
+    __require_clbck();
+    __abort();
+  }
+};
 void
 require(const bool expected_output)
 {
   if ( expected_output == false ) {
+    __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
+    should_print_stack();
+    __require_clbck();
+    __abort();
+  }
+};
+
+template <typename A, typename B>
+void
+require(const A &_a, const B &_b)
+{
+  if ( _a != _b ) {
+    __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
+    should_print_stack();
+    __require_clbck();
+    __abort();
+  }
+};
+
+template <typename A, typename B>
+void
+require_greater(const A &_a, const B &_b)
+{
+  if ( _a <= _b ) {
+    __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
+    should_print_stack();
+    __require_clbck();
+    __abort();
+  }
+};
+
+template <typename A, typename B>
+void
+require_smaller(const A &_a, const B &_b)
+{
+  if ( _a >= _b ) {
+    __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
+    should_print_stack();
+    __require_clbck();
+    __abort();
+  }
+};
+
+template <typename A, typename B, typename Fn, typename... Args>
+void
+require_cmp(const A &_a, const B &_b, Fn &&f, Args &&...args)
+{
+  if ( f(_a, _b) == false ) {
     __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
     should_print_stack();
     __require_clbck();
