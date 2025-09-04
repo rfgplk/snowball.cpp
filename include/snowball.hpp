@@ -171,7 +171,6 @@ __check_eq(const E &e, Fn &&fn, Ts... args)
 {
   return fn(std::forward<Ts>(args)...) == e;
 }
-
 // variadic check: returns true only if all pack members satisfy __check_eq
 template <typename E, typename Fn, typename... Ts>
 constexpr bool
