@@ -1,4 +1,4 @@
-<img align"left" src="https://github.com/user-attachments/assets/4cbd11f8-6dca-49ae-95ad-527bfeb001ad" alt="snowball_logo_384" width="300"/>
+<img align="left" src="https://github.com/user-attachments/assets/4cbd11f8-6dca-49ae-95ad-527bfeb001ad" alt="snowball_logo_384" width="300"/>
 
 <div align="left">
 ### *snowball* ⚪ 
