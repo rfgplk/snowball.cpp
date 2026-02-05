@@ -1,7 +1,6 @@
-<div align="center">
-  <img src="https://github.com/user-attachments/assets/4cbd11f8-6dca-49ae-95ad-527bfeb001ad" alt="snowball_logo_384" width="300"/>
-  </div>
+<img align"left" src="https://github.com/user-attachments/assets/4cbd11f8-6dca-49ae-95ad-527bfeb001ad" alt="snowball_logo_384" width="300"/>
 
+<div align="left">
 ### *snowball* ⚪ 
 
 #### a single header, effective, C++20 unit testing framework
