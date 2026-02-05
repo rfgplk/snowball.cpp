@@ -2,7 +2,7 @@
   <img src="https://github.com/user-attachments/assets/4cbd11f8-6dca-49ae-95ad-527bfeb001ad" alt="snowball_logo_384" width="300"/>
   </div>
 
-# snowball
+# snowball ⚪
 ### a single header, effective, C++20 unit testing framework
 
 snowball is a *miniscule* and **highly intuitive** unit library, written in C++20. 
