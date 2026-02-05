@@ -41,7 +41,7 @@ __exit(void)
   __builtin_exit(6);
 }
 
-void
+__attribute__((noreturn)) void
 __abort(void)
 {
   if constexpr ( config::__default_abort_on_require ) {
@@ -250,7 +250,7 @@ end_test_case(void)
   __global_test_case.clear();
 }
 
-void
+__attribute__((noreturn)) void
 early_end(void)
 {
   __abort();
@@ -273,7 +273,7 @@ print(const char *p)
 }
 
 template <typename T>
-void
+__attribute__((noreturn)) void
 error(const T &p)
 {
   __print_error("\033[34msnowball error():\033[0m ");
@@ -282,7 +282,7 @@ error(const T &p)
   __abort();
 }
 
-void
+__attribute__((noreturn)) void
 error(const char *ptr)
 {
   __print_error("\033[34msnowball error():\033[0m ");
@@ -298,6 +298,18 @@ void
 require_distinct(bool (*fn)(FArgs...), Args &&...args)
 {
   if ( fn(std::forward<Args>(args)...) == false ) {
+    __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
+    should_print_stack();
+    __require_clbck();
+    __abort();
+  }
+};
+
+template <typename... Args>
+void
+require(bool v)
+{
+  if ( v == true ) {
     __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
     should_print_stack();
     __require_clbck();
@@ -345,17 +357,37 @@ require_print(bool (&fn)(Args...), Args &&...args)
     __abort();
   }
 };
+
 void
-require(const bool expected_output)
+require(const bool a, const bool b)
+{
+  if ( a != b ) {
+    __print_error("\033[34msnowball require() failure:\033[0m expected output was wrong.\n\r");
+    should_print_stack();
+    __require_clbck();
+    __abort();
+  }
+};
+void
+require_false(const bool expected_output)
 {
   if ( expected_output == false ) {
+    __print_error("\033[34msnowball require() failure:\033[0m expected output was true.\n\r");
+    should_print_stack();
+    __require_clbck();
+    __abort();
+  }
+};
+void
+require_true(const bool expected_output)
+{
+  if ( expected_output == true ) {
     __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
     should_print_stack();
     __require_clbck();
     __abort();
   }
 };
-
 template <typename A, typename B>
 void
 require(const A &_a, const B &_b)
@@ -504,6 +536,20 @@ require_false(Object &object, Fn &&fn, const Dt_In &input, const Dt_Ex &expected
 
 // throw variants
 
+template <typename Fn>
+void
+require_throw(Fn &&fn)
+{
+  try {
+    fn();
+    __print_error("\033[34msnowball require_throw() failure:\033[0m nothing was thrown.\n\r");
+    should_print_stack();
+    __require_clbck();
+    __abort();
+  } catch ( ... ) {
+    return;
+  }
+};
 template <typename Fn>
   requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn>)
 void
