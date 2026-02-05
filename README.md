@@ -6,7 +6,7 @@
 ### *snowball* ⚪ 
 
 #### a single header, effective, C++20 unit testing framework
-snowball is a *miniscule* and **highly intuitive** unit library, written in C++20. 
+snowball is a *miniscule* and **highly intuitive** unit testing library, written in C++20. 
 
 </div>
 
