@@ -41,7 +41,7 @@ __exit(void)
   __builtin_exit(6);
 }
 
-__attribute__((noreturn)) void
+void __attribute__((noreturn))
 __abort(void)
 {
   if constexpr ( config::__default_abort_on_require ) {
@@ -102,6 +102,12 @@ __print_stack()
 }
 
 void
+stdout(const char *str)
+{
+  __print(str);
+  __print("\n");
+}
+void
 verify_debug(void)
 {
 #if defined(__OPTIMIZE__) || __has_feature(debug_info)
@@ -110,7 +116,7 @@ verify_debug(void)
 }
 
 #define enable_scope(x) if constexpr ( true )
-#define disable_scope(x) if constexpr ( true )
+#define disable_scope(x) if constexpr ( false )
 
 inline __attribute__((always_inline)) void
 should_print_stack(void)
@@ -250,7 +256,7 @@ end_test_case(void)
   __global_test_case.clear();
 }
 
-__attribute__((noreturn)) void
+void __attribute__((noreturn))
 early_end(void)
 {
   __abort();
@@ -273,7 +279,7 @@ print(const char *p)
 }
 
 template <typename T>
-__attribute__((noreturn)) void
+void __attribute__((noreturn))
 error(const T &p)
 {
   __print_error("\033[34msnowball error():\033[0m ");
@@ -282,7 +288,7 @@ error(const T &p)
   __abort();
 }
 
-__attribute__((noreturn)) void
+void __attribute__((noreturn))
 error(const char *ptr)
 {
   __print_error("\033[34msnowball error():\033[0m ");
@@ -309,14 +315,13 @@ template <typename... Args>
 void
 require(bool v)
 {
-  if ( v == true ) {
+  if ( v == false ) {
     __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
     should_print_stack();
     __require_clbck();
     __abort();
   }
 };
-
 template <typename... Args>
 void
 require(bool (*fn)(Args...), Args &&...args)
@@ -359,6 +364,16 @@ require_print(bool (&fn)(Args...), Args &&...args)
 };
 
 void
+require_distinct(const bool a, const bool b)
+{
+  if ( a == b ) {
+    __print_error("\033[34msnowball require() failure:\033[0m expected output was wrong.\n\r");
+    should_print_stack();
+    __require_clbck();
+    __abort();
+  }
+};
+void
 require(const bool a, const bool b)
 {
   if ( a != b ) {
@@ -371,7 +386,7 @@ require(const bool a, const bool b)
 void
 require_false(const bool expected_output)
 {
-  if ( expected_output == false ) {
+  if ( expected_output != false ) {
     __print_error("\033[34msnowball require() failure:\033[0m expected output was true.\n\r");
     should_print_stack();
     __require_clbck();
@@ -381,7 +396,7 @@ require_false(const bool expected_output)
 void
 require_true(const bool expected_output)
 {
-  if ( expected_output == true ) {
+  if ( expected_output != true ) {
     __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
     should_print_stack();
     __require_clbck();
@@ -535,7 +550,6 @@ require_false(Object &object, Fn &&fn, const Dt_In &input, const Dt_Ex &expected
 };
 
 // throw variants
-
 template <typename Fn>
 void
 require_throw(Fn &&fn)
@@ -876,7 +890,7 @@ fuzz(Fn &&fn, size_t cnt)
 
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<size_t> dist(0, (2 << (4 * 8)) - 1);
+    std::uniform_int_distribution<size_t> dist(0, (2 << (4 * 6)) - 1);
 
     for ( size_t i = 0; i < cnt; ++i ) {
       var = static_cast<typename traits::arg_type<0>>(dist(gen));
