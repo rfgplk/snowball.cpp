@@ -5,28 +5,26 @@
 //  http://www.boost.org/LICENSE_1_0.txt
 #pragma once
 
-#include <micron/std.hpp>
+#include <cstdio>
+#include <cstdlib>
+#include <iostream>
+#include <random>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 
-#include <micron/concepts.hpp>
-#include <micron/tuple.hpp>
-#include <micron/type_traits.hpp>
-
-#include <micron/string/strings.hpp>
-
-#include <micron/io/console.hpp>
-#include <micron/io/io.hpp>
-#include <micron/io/stdout.hpp>
-
-#include <micron/except.hpp>
-#include <micron/exit.hpp>
+#include <exception>
+#include <execinfo.h>     // TODO: add Windows spec.
+#include <stdexcept>
+#include <string>
 
 namespace snowball
 {
-using string_type = micron::string;
+using string_type = std::string;
 
-inline string_type __global_test_case{};
-inline void (*__global_on_require)() = nullptr;
-inline void (*__global_on_check)() = nullptr;
+string_type __global_test_case = "";
+void (*__global_on_require)() = nullptr;
+void (*__global_on_check)() = nullptr;
 
 namespace config
 {
@@ -37,90 +35,82 @@ constexpr static const bool __default_else_throw_on_require = false;
 
 // start out functions
 
-[[noreturn]] inline void
+__attribute__((noreturn)) void
 __exit(void)
 {
-  micron::sys_exit(6);
+  __builtin_exit(6);
 }
 
-[[noreturn]] inline void
+void __attribute__((noreturn))
 __abort(void)
 {
   if constexpr ( config::__default_abort_on_require ) {
     __exit();
   } else if constexpr ( config::__default_else_throw_on_require ) {
-    throw micron::runtime{ "snowball exception in abort()" };
+    throw std::runtime_error{ "snowball exception in abort()" };
   }
-  micron::sys_exit(6);
 }
 
-template <typename... T>
+// this is here so you can swap func's out with custom ones
 inline __attribute__((always_inline)) void
-__print(const T &...args)
-{
-  micron::io::print(args...);
-}
-
-template <typename... T>
-inline __attribute__((always_inline)) void
-__print_error(const T &...args)
+__print_error(const char *str)
 {
   if ( __global_test_case.size() ) {
-    micron::io::print("\033[34m:: Test case error...\033[0m\n\r");
-    micron::io::print("\033[90m");
-    micron::io::print("[ ", __global_test_case, " ]");
-    micron::io::print("\033[0m");
-    micron::io::print("\n\r");
+    std::fprintf(stderr, "\033[34m:: Test case error...\033[0m\n\r");
+    std::fprintf(stderr, "\033[90m");
+    std::fprintf(stderr, "[ %s ]", __global_test_case.c_str());
+    std::fprintf(stderr, "\033[0m");
+    std::fprintf(stderr, "\n\r");
   }
-  micron::io::print(args...);
+  std::fprintf(stderr, str);
+}
+
+inline __attribute__((always_inline)) void
+__print(const char *str)
+{
+  std::fprintf(stdout, str);
+}
+
+template <typename T>
+inline __attribute__((always_inline)) void
+__print(const char *str, T t)
+{
+  std::fprintf(stdout, str, t);
 }
 
 // end out functions
 
-inline void
+void
 __print_stack()
 {
   constexpr int max_frames = 64;
   void *buffer[max_frames];
-  int n = 0;
 
-  void **fp = static_cast<void **>(__builtin_frame_address(0));
-  for ( int i = 0; i < max_frames && fp; ++i ) {
-    void *next_fp = fp[0];
-    void *next_ret = fp[1];
-    if ( !next_ret )
-      break;
-    if ( reinterpret_cast<umax_t>(next_fp) <= reinterpret_cast<umax_t>(fp) )
-      break;
-    buffer[n++] = next_ret;
-    fp = static_cast<void **>(next_fp);
-  }
+  int nptrs = backtrace(buffer, max_frames);
+  char **symbols = backtrace_symbols(buffer, nptrs);
+  if ( !symbols )
+    return;
 
   __print("Start of call stack:\n\r");
-  if ( n == 0 ) {
-    __print("(unavailable; compile with -fno-omit-frame-pointer for traces)\n\r");
-    return;
-  }
-  for ( int i = 0; i < n; ++i ) {
+  for ( int i = 0; i < nptrs; ++i ) {
     __print("#");
-    __print(i);
-    __print(": ");
-    __print(buffer[i]);
+    __print("%d: ", i);
+    __print(symbols[i]);
     __print("\n\r");
   }
+  std::free(symbols);
 }
 
-inline void
+void
 stdout(const char *str)
 {
   __print(str);
   __print("\n");
 }
-
-inline void
+void
 verify_debug(void)
 {
-#if defined(__OPTIMIZE__) || (defined(__has_feature) && __has_feature(debug_info))
+#if defined(__OPTIMIZE__) || __has_feature(debug_info)
   __print("\033[34msnowball warning:\033[0m the executable *wasn't* compiled in debug mode (-g).\n\r");
 #endif
 }
@@ -142,10 +132,10 @@ template <typename T> struct function_traits;
 // free functions
 template <typename R, typename... Args> struct function_traits<R(Args...)> {
   using return_type = R;
-  static constexpr size_t arity = sizeof...(Args);
-  using args_tuple = micron::tuple<Args...>;
+  static constexpr std::size_t arity = sizeof...(Args);
+  using args_tuple = std::tuple<Args...>;
 
-  template <size_t N> using arg_type = micron::tuple_element_t<N, args_tuple>;
+  template <std::size_t N> using arg_type = typename std::tuple_element<N, args_tuple>::type;
 };
 
 // function pointers
@@ -165,27 +155,27 @@ struct function_traits<R (C::*)(Args...) const> : function_traits<R(Args...)> {
 template <typename F> struct function_traits : function_traits<decltype(&F::operator())> {
 };
 
-template <typename Tuple, typename F, size_t... I>
+template <typename Tuple, typename F, std::size_t... I>
 constexpr void
-for_each_type_impl(F &&f, micron::index_sequence<I...>)
+for_each_type_impl(F &&f, std::index_sequence<I...>)
 {
-  (f.template operator()<micron::tuple_element_t<I, Tuple>>(), ...);
+  (f.template operator()<std::tuple_element_t<I, Tuple>>(), ...);
 }
 
 template <typename Tuple, typename F>
 constexpr void
 for_each_type(F &&f)
 {
-  for_each_type_impl<Tuple>(micron::forward<F>(f), micron::make_index_sequence<micron::tuple_size_v<Tuple>>{});
+  for_each_type_impl<Tuple>(std::forward<F>(f), std::make_index_sequence<std::tuple_size_v<Tuple>>{});
 }
 
-template <typename F, typename... T> constexpr bool all_invocable_t = (micron::is_invocable_v<F, T> && ...);
+template <typename F, typename... T> constexpr bool all_invocable_t = (std::is_invocable_v<F, T> && ...);
 
 template <typename E, typename Fn, typename... Ts>
 bool
 __check_eq(const E &e, Fn &&fn, Ts... args)
 {
-  return fn(micron::forward<Ts>(args)...) == e;
+  return fn(std::forward<Ts>(args)...) == e;
 }
 // variadic check: returns true only if all pack members satisfy __check_eq
 template <typename E, typename Fn, typename... Ts>
@@ -194,9 +184,8 @@ __check(const E &expected, Fn &&fn, Ts &&...__args)
 {
   // this has to be like this so it properly binds to any type of function passed in
   return (...
-          && micron::apply(
-              [&](auto &&...args) { return __check_eq(expected, fn, micron::forward<decltype(args)>(args)...); },
-              micron::forward<Ts>(__args)));
+          && std::apply([&](auto &&...args) { return __check_eq(expected, fn, std::forward<decltype(args)>(args)...); },
+                        std::forward<Ts>(__args)));
 }
 
 template <typename E, typename Fn, typename... Ts>
@@ -204,43 +193,41 @@ constexpr bool
 check_false(const E &expected, Fn &&fn, Ts &&...__args)
 {
   return (...
-          && micron::apply(
-              [&](auto &&...args) { return !__check_eq(expected, fn, micron::forward<decltype(args)>(args)...); },
-              micron::forward<Ts>(__args)));
+          && std::apply([&](auto &&...args) { return !__check_eq(expected, fn, std::forward<decltype(args)>(args)...); },
+                        std::forward<Ts>(__args)));
 }
-
 template <typename E, typename Fn, typename... Ts>
 constexpr void
 call_fn(const E &expected, Fn &&fn, Ts &&...__args)
 {
   (...
-   && micron::apply([&](auto &&...args) { return !__check(expected, fn, micron::forward<decltype(args)>(args)...); },
-                    micron::forward<Ts>(__args)));
+   && std::apply([&](auto &&...args) { return !__check(expected, fn, std::forward<decltype(args)>(args)...); },
+                 std::forward<Ts>(__args)));
 }
 
 // global setting helpers
 
-inline void
+void
 require_callback(void (*fn)())
 {
   if ( fn != nullptr )
     __global_on_require = fn;
 }
-inline void
+void
 check_callback(void (*fn)())
 {
   if ( fn != nullptr )
     __global_on_check = fn;
 }
 
-inline void
+void
 __require_clbck(void)
 {
   if ( __global_on_require != nullptr )
     __global_on_require();
 }
 
-inline void
+void
 __check_clbck(void)
 {
   if ( __global_on_check != nullptr )
@@ -248,7 +235,7 @@ __check_clbck(void)
 }
 
 template <typename T>
-  requires(micron::is_object_v<T>)
+  requires(std::is_object_v<T>)
 string_type
 test_case(const T &str)
 {
@@ -256,20 +243,20 @@ test_case(const T &str)
   return __global_test_case;
 }
 
-inline string_type
+string_type
 test_case(const char *str)
 {
   __global_test_case = str;
   return __global_test_case;
 }
 
-inline void
+void
 end_test_case(void)
 {
   __global_test_case.clear();
 }
 
-[[noreturn]] inline void
+void __attribute__((noreturn))
 early_end(void)
 {
   __abort();
@@ -279,12 +266,11 @@ template <typename... T>
 void
 print(const T &...p)
 {
-  __print("\033[34msnowball msg:\033[0m ");
-  __print(p...);
-  __print("\n");
+  std::cout << "\033[34msnowball msg:\033[0m ";
+  ((std::cout << p), ...) << std::endl;
 }
 
-inline void
+void
 print(const char *p)
 {
   __print("\033[34msnowball msg:\033[0m ");
@@ -293,17 +279,16 @@ print(const char *p)
 }
 
 template <typename T>
-[[noreturn]] void
+void __attribute__((noreturn))
 error(const T &p)
 {
   __print_error("\033[34msnowball error():\033[0m ");
-  __print_error(p);
-  __print_error("\n\r");
+  std::cout << p << std::endl;
   __require_clbck();
   __abort();
 }
 
-[[noreturn]] inline void
+void __attribute__((noreturn))
 error(const char *ptr)
 {
   __print_error("\033[34msnowball error():\033[0m ");
@@ -318,7 +303,7 @@ template <typename... FArgs, typename... Args>
 void
 require_distinct(bool (*fn)(FArgs...), Args &&...args)
 {
-  if ( fn(micron::forward<Args>(args)...) == false ) {
+  if ( fn(std::forward<Args>(args)...) == false ) {
     __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
     should_print_stack();
     __require_clbck();
@@ -341,7 +326,7 @@ template <typename... Args>
 void
 require(bool (*fn)(Args...), Args &&...args)
 {
-  if ( fn(micron::forward<Args>(args)...) == false ) {
+  if ( fn(std::forward<Args>(args)...) == false ) {
     __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
     should_print_stack();
     __require_clbck();
@@ -354,7 +339,7 @@ template <typename... FArgs, typename... Args>
 void
 require_print(bool (*fn)(FArgs...), Args &&...args)
 {
-  bool _t = fn(micron::forward<Args>(args)...);
+  bool _t = fn(std::forward<Args>(args)...);
   print(_t);
   if ( _t == false ) {
     __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
@@ -368,7 +353,7 @@ template <typename... Args>
 void
 require_print(bool (&fn)(Args...), Args &&...args)
 {
-  bool _t = fn(micron::forward<Args>(args)...);
+  bool _t = fn(std::forward<Args>(args)...);
   print(_t);
   if ( _t == false ) {
     __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
@@ -378,7 +363,7 @@ require_print(bool (&fn)(Args...), Args &&...args)
   }
 };
 
-inline void
+void
 require_distinct(const bool a, const bool b)
 {
   if ( a == b ) {
@@ -388,7 +373,7 @@ require_distinct(const bool a, const bool b)
     __abort();
   }
 };
-inline void
+void
 require(const bool a, const bool b)
 {
   if ( a != b ) {
@@ -398,7 +383,7 @@ require(const bool a, const bool b)
     __abort();
   }
 };
-inline void
+void
 require_false(const bool expected_output)
 {
   if ( expected_output != false ) {
@@ -408,10 +393,10 @@ require_false(const bool expected_output)
     __abort();
   }
 };
-inline void
+void
 require_true(const bool expected_output)
 {
-  if ( !expected_output ) {
+  if ( expected_output != true ) {
     __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
     should_print_stack();
     __require_clbck();
@@ -468,8 +453,7 @@ require_cmp(const A &_a, const B &_b, Fn &&f, Args &&...args)
 
 // spec. for void functions
 template <typename Fn, typename Dt_Ex, typename... Dt_In>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn>)
 void
 require(Fn &&fn, const Dt_Ex &expected_output)
 {
@@ -481,12 +465,11 @@ require(Fn &&fn, const Dt_Ex &expected_output)
   }
 };
 template <typename Fn, typename Dt_Ex, typename... Dt_In>
-  requires(((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-            && all_invocable_t<Fn, Dt_In...>))
+  requires(((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && all_invocable_t<Fn, Dt_In...>))
 void
 require(Fn &&fn, const Dt_Ex &expected_output, const Dt_In &...inputs)
 {
-  if ( !__check(expected_output, micron::forward<Fn>(fn), micron::make_tuple(inputs...)) ) {
+  if ( !__check(expected_output, std::forward<Fn>(fn), std::make_tuple(inputs...)) ) {
     __print_error("\033[34msnowball require() failure:\033[0m expected output was false.\n\r");
     should_print_stack();
     __require_clbck();
@@ -519,8 +502,7 @@ require(Object &object, Fn &&fn, const Dt_In &input, const Dt_Ex &expected_outpu
 
 // spec. for void functions
 template <typename Fn, typename Dt_Ex, typename... Dt_In>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn>)
 void
 require_false(Fn &&fn, const Dt_Ex &expected_output)
 {
@@ -532,12 +514,11 @@ require_false(Fn &&fn, const Dt_Ex &expected_output)
   }
 };
 template <typename Fn, typename Dt_Ex, typename... Dt_In>
-  requires(((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-            && all_invocable_t<Fn, Dt_In...>))
+  requires(((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && all_invocable_t<Fn, Dt_In...>))
 void
 require_false(Fn &&fn, const Dt_Ex &expected_output, const Dt_In &...inputs)
 {
-  if ( !check_false(expected_output, micron::forward<Fn>(fn), micron::make_tuple(inputs...)) ) {
+  if ( !check_false(expected_output, std::forward<Fn>(fn), std::make_tuple(inputs...)) ) {
     __print_error("\033[34msnowball require_false() failure:\033[0m expected output was true.\n\r");
     should_print_stack();
     __require_clbck();
@@ -584,8 +565,7 @@ require_throw(Fn &&fn)
   }
 };
 template <typename Fn>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn>)
 void
 require_throw(Fn &&fn)
 {
@@ -601,13 +581,12 @@ require_throw(Fn &&fn)
 };
 
 template <typename Fn, typename... Args>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn, Args...>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn, Args...>)
 void
 require_throw(Fn &&fn, Args &&...args)
 {
   try {
-    (*fn)(micron::forward<Args>(args)...);
+    (*fn)(std::forward<Args>(args)...);
     __print_error("\033[34msnowball require_throw() failure:\033[0m nothing was thrown.\n\r");
     should_print_stack();
     __require_clbck();
@@ -617,13 +596,12 @@ require_throw(Fn &&fn, Args &&...args)
   }
 };
 template <typename E, typename Fn, typename... Args>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn, Args...>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn, Args...>)
 void
 require_throw(Fn &&fn, Args &&...args)
 {
   try {
-    (*fn)(micron::forward<Args>(args)...);
+    (*fn)(std::forward<Args>(args)...);
     should_print_stack();
     __print_error("\033[34msnowball require_throw() failure:\033[0m nothing was thrown");
     __require_clbck();
@@ -641,8 +619,7 @@ require_throw(Fn &&fn, Args &&...args)
 }
 
 template <typename Fn>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn>)
 void
 require_nothrow(Fn &&fn)
 {
@@ -657,13 +634,12 @@ require_nothrow(Fn &&fn)
 };
 
 template <typename Fn, typename... Args>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn, Args...>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn, Args...>)
 void
 require_nothrow(Fn &&fn, Args &&...args)
 {
   try {
-    (*fn)(micron::forward<Args>(args)...);
+    (*fn)(std::forward<Args>(args)...);
   } catch ( ... ) {
     __print_error("\033[34msnowball require_nothrow() failure:\033[0m something was thrown.\n\r");
     should_print_stack();
@@ -675,7 +651,7 @@ require_nothrow(Fn &&fn, Args &&...args)
 // start checks
 // the only difference between a require and a check is that checks don't abort
 
-inline void
+void
 check(const bool expected_output)
 {
   if ( expected_output == false ) {
@@ -687,8 +663,7 @@ check(const bool expected_output)
 
 // spec. for void functions
 template <typename Fn, typename Dt_Ex, typename... Dt_In>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn>)
 void
 check(Fn &&fn, const Dt_Ex &expected_output)
 {
@@ -699,12 +674,11 @@ check(Fn &&fn, const Dt_Ex &expected_output)
   }
 };
 template <typename Fn, typename Dt_Ex, typename... Dt_In>
-  requires(((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-            && all_invocable_t<Fn, Dt_In...>))
+  requires(((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && all_invocable_t<Fn, Dt_In...>))
 void
 check(Fn &&fn, const Dt_Ex &expected_output, const Dt_In &...inputs)
 {
-  if ( !__check(expected_output, micron::forward<Fn>(fn), micron::make_tuple(inputs...)) ) {
+  if ( !__check(expected_output, std::forward<Fn>(fn), std::make_tuple(inputs...)) ) {
     __print_error("\033[34msnowball check() failure:\033[0m expected output was false.\n\r");
     should_print_stack();
     __check_clbck();
@@ -759,8 +733,7 @@ check_nothrow(Object &object, Fn &&fn)
 
 // spec. for void functions
 template <typename Fn, typename Dt_Ex, typename... Dt_In>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn>)
 void
 check_false(Fn &&fn, const Dt_Ex &expected_output)
 {
@@ -771,12 +744,11 @@ check_false(Fn &&fn, const Dt_Ex &expected_output)
   }
 };
 template <typename Fn, typename Dt_Ex, typename... Dt_In>
-  requires(((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-            && all_invocable_t<Fn, Dt_In...>))
+  requires(((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && all_invocable_t<Fn, Dt_In...>))
 void
 check_false(Fn &&fn, const Dt_Ex &expected_output, const Dt_In &...inputs)
 {
-  if ( !check_false(expected_output, micron::forward<Fn>(fn), micron::make_tuple(inputs...)) ) {
+  if ( !check_false(expected_output, std::forward<Fn>(fn), std::make_tuple(inputs...)) ) {
     __print_error("\033[34msnowball check_false() failure:\033[0m expected output was true.\n\r");
     should_print_stack();
     __check_clbck();
@@ -807,8 +779,7 @@ check_false(Object &object, Fn &&fn, const Dt_In &input, const Dt_Ex &expected_o
 // throw variants
 
 template <typename Fn>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn>)
 void
 check_throw(Fn &&fn)
 {
@@ -823,13 +794,12 @@ check_throw(Fn &&fn)
 };
 
 template <typename Fn, typename... Args>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn, Args...>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn, Args...>)
 void
 check_throw(Fn &&fn, Args &&...args)
 {
   try {
-    (*fn)(micron::forward<Args>(args)...);
+    (*fn)(std::forward<Args>(args)...);
     __print_error("\033[34msnowball check_throw() failure:\033[0m nothing was thrown.\n\r");
     should_print_stack();
     __check_clbck();
@@ -838,13 +808,12 @@ check_throw(Fn &&fn, Args &&...args)
   }
 };
 template <typename E, typename Fn, typename... Args>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn, Args...>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn, Args...>)
 void
 check_throw(Fn &&fn, Args &&...args)
 {
   try {
-    (*fn)(micron::forward<Args>(args)...);
+    (*fn)(std::forward<Args>(args)...);
     should_print_stack();
     __print_error("\033[34msnowball check_throw() failure:\033[0m nothing was thrown");
     __check_clbck();
@@ -860,15 +829,14 @@ check_throw(Fn &&fn, Args &&...args)
 };
 
 template <typename Fn>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn>)
 void
 check_nothrow(Fn &&fn)
 {
   try {
     (*fn)();
   } catch ( ... ) {
-    __print_error("\033[34msnowball check_nothrow() failure:\033[0m something was thrown.\n\r");
+    ("\033[34msnowball check_throw() failure:\033[0m nothing was thrown.\n\r");
     should_print_stack();
     __check_clbck();
     return;
@@ -876,28 +844,26 @@ check_nothrow(Fn &&fn)
 };
 
 template <typename Fn, typename... Args>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn, Args...>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn, Args...>)
 void
 check_nothrow(Fn &&fn, Args &&...args)
 {
   try {
-    (*fn)(micron::forward<Args>(args)...);
+    (*fn)(std::forward<Args>(args)...);
   } catch ( ... ) {
-    __print_error("\033[34msnowball check_nothrow() failure:\033[0m something was thrown.\n\r");
+    __print_error("\033[34msnowball check_throw() failure:\033[0m nothing was thrown.\n\r");
     should_print_stack();
     __check_clbck();
     return;
   }
 };
 template <typename E, typename Fn, typename... Args>
-  requires((micron::is_function_v<micron::remove_pointer_t<Fn>> or micron::is_function_v<Fn>)
-           && micron::is_invocable_v<Fn, Args...>)
+  requires((std::is_function_v<std::remove_pointer_t<Fn>> or std::is_function_v<Fn>) && std::is_invocable_v<Fn, Args...>)
 void
 check_nothrow(Fn &&fn, Args &&...args)
 {
   try {
-    (*fn)(micron::forward<Args>(args)...);
+    (*fn)(std::forward<Args>(args)...);
   } catch ( const E &ex ) {
     __print("\033[34msnowball check_throw(): ");
     __print(ex.what());
@@ -909,38 +875,29 @@ check_nothrow(Fn &&fn, Args &&...args)
   }
 };
 
-namespace __impl
-{
-inline u64
-__xorshift64(u64 &s)
-{
-  s ^= s << 13;
-  s ^= s >> 7;
-  s ^= s << 17;
-  return s;
-}
-};     // namespace __impl
-
+// start fuzzer
+// TODO: expand this later, this is simply a rudimentary brute force fuzzer
 template <typename Fn>
 void
 fuzz(Fn &&fn, size_t cnt)
 {
+  // also black magic
   using traits = function_traits<decltype(&fn)>;
-  if constexpr ( traits::arity == 1 ) {
-    typename traits::template arg_type<0> var{};
+  // for_each_type<typename traits::args_tuple>([]<typename T>() { size_t sz = sizeof(T); });
+  if ( traits::arity == 1 ) {
+    typename traits::arg_type<0> var{};
+    size_t sz = sizeof(var);
 
-    static u64 __seed = []() {
-      u64 s = __builtin_ia32_rdtsc();
-      return s ? s : 0xdeadbeefULL;
-    }();
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<size_t> dist(0, (2 << (4 * 6)) - 1);
 
     for ( size_t i = 0; i < cnt; ++i ) {
-      u64 r = __impl::__xorshift64(__seed) & ((1ULL << 25) - 1);
-      var = static_cast<typename traits::template arg_type<0>>(r);
+      var = static_cast<typename traits::arg_type<0>>(dist(gen));
       fn(var);
     }
   }
 }
-};     // namespace snowball
+};
 
 namespace sb = snowball;
